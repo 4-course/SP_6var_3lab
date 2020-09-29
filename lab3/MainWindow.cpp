@@ -23,81 +23,83 @@ void checkIsWindowCreated(HWND window) {
     }
 }
 
-int sizeOfInt(int value) {
-    int size = 1;
-    value = abs(value);
-    while (value > 0) {
-        size++;
-        value /= 10;
-    }
-    return size;
-}
-
-wchar_t* longToLPWSTR(long value) {
-    int size = sizeOfInt(value);
-    wchar_t* converted = new wchar_t[size];
-    _ltow_s(value, converted, sizeof(converted), 10);
-    return converted;
-}
-
-LRESULT CALLBACK edit1Proc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lParam) {
-    wchar_t value[100000];
-    switch (msg) {
-        case WM_KEYDOWN:
-            if ((wParam >= '0' && wParam <= '9') || wParam == VK_RETURN || wParam == VK_DELETE || wParam == VK_BACK)
-                break;
-            else if (wParam == '-' && !hasMinus) {
-                hasMinus = true;
-            }
-            else if (wParam == '.' && !hasDot) {
-                hasDot = true;
-            }
-            else {
-                if (((wParam == '-' && hasMinus) || (wParam == '.' && hasDot) || wParam < '0' || wParam>'9')) {
-                    SendMessage(hEdit, EM_UNDO, wParam, lParam);
-                    return TRUE;
-                }
-            }
-        break;
-        case WM_CHAR:
-            if ((wParam >= '0' && wParam <= '9') || wParam == VK_RETURN || wParam == VK_DELETE || wParam == VK_BACK)
-                break;
-            else if (wParam == '-' && !hasMinus) {
-                hasMinus = true;
-            }
-            else if (wParam == '.' && !hasDot) {
-                hasDot = true;
-            }
-            else {
-                if (((wParam == '-' && hasMinus) || (wParam == '.' && hasDot) || wParam < '0' || wParam>'9')
-                    && (wParam != VK_RETURN || wParam != VK_DELETE || wParam != VK_BACK)) {
-                    SendMessage(hEdit, EM_UNDO, wParam, lParam);
-                    return TRUE;
-                }
-            }
-            break;
-    }
-    return CallWindowProc(oldEdit1Proc, hEdit, msg, wParam, lParam);
-}
-
 LRESULT CALLBACK DlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     wchar_t xmin[100000], xmax[100000];
-    BOOL* isNumber = FALSE;
-    UINT res;
+    std::wstringstream wss;
+    std::wstring converted;
+    std::wstring converted2;
+    LPCWSTR value1, value2;
+    bool hasMinus1 = false;
+    bool hasMinus2 = false;
+    bool hasDot1 = false;
+    bool hasDot2 = false;
+    int dot1 = -1;
+    int dot2 = -1;
+    bool isNumber = true;
     switch (message) {
         case WM_INITDIALOG:
-            oldEdit1Proc = (WNDPROC)SetWindowLong(GetDlgItem(hDlg, IDC_EDIT1),GWL_WNDPROC, (LONG)edit1Proc);
-            //oldEdit2Proc = (WNDPROC)SetWindowLong(GetDlgItem(hDlg, IDC_EDIT2),GWL_WNDPROC, (LONG)edit2Proc);
-            SetDlgItemText(hDlg, IDC_EDIT1, longToLPWSTR(draw->getXmin()));
-            SetDlgItemText(hDlg, IDC_EDIT2, longToLPWSTR(draw->getXmax()));
+
+            wss << draw->getXmax();
+            converted = wss.str();
+            value1 = converted.c_str();
+
+            wss.str(L"");
+            
+            wss << draw->getXmin();
+            converted2 = wss.str();
+            value2 = converted2.c_str();
+
+            wss.str(L"");
+
+            SetDlgItemText(hDlg, IDC_EDIT1, value2);
+            SetDlgItemText(hDlg, IDC_EDIT2, value1);
             return TRUE;
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
                 case IDOK:
                     GetDlgItemText(hDlg, IDC_EDIT1, xmin, sizeof(xmin));
                     GetDlgItemText(hDlg, IDC_EDIT2, xmax, sizeof(xmax));
-                    draw->setXmin(_wtol(xmin));
-                    draw->setXmax(_wtol(xmax));
+
+                    for (int i = 0; i < 100000; i++) {
+                        if (i == 0 && xmin[i] == '-')
+                            hasMinus1 = true;
+                        else if (i != 0 && xmin[i] == '.') {
+                            hasDot1 = true;
+                            dot1 = i;
+                        }
+                        else if (xmin[i] == '\0')
+                            break;
+                        else if ((hasMinus1 && xmin[i] == '-' && i != 0) || (hasDot1 && xmin[i] == '.' && dot1 != i)
+                            || ((xmin[i] < '0' || xmin[i]>'9') && xmin[i] != '.' && xmin[i] != '-')) {
+                            isNumber = false;
+                            break;
+                        }
+                    }
+
+                    for (int i = 0; i < 100000; i++) {
+                        if (i == 0 && xmax[i] == '-')
+                            hasMinus2 = true;
+                        else if (i != 0 && xmax[i] == '.') {
+                            hasDot2 = true;
+                            dot2 = i;
+                        }
+                        else if (xmax[i] == '\0')
+                            break;
+                        else if ((hasMinus2 && xmax[i] == '-' && i != 0) || (hasDot2 && xmax[i] == '.' && dot2 != i)
+                            || ((xmax[i] < '0' || xmax[i]>'9') && xmax[i] != '.' && xmax[i] != '-')) {
+                            isNumber = false;
+                            break;
+                        }
+                    }
+
+                    if (!isNumber) {
+                        MessageBox(NULL, L"Введите число пожалуйста" + GetLastError(), L"Неверное число", MB_ICONERROR);
+                        break;
+                    }
+
+
+                    draw->setXmin(_wtof(xmin));
+                    draw->setXmax(_wtof(xmax));
                     if (draw->getXmin() >= draw->getXmax())
                         MessageBox(hDlg, L"Значение Xmin должно быть меньше Xmax", L"Значения границ", MB_ICONINFORMATION);
                     else
@@ -122,19 +124,26 @@ LRESULT CALLBACK DlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     RECT rt;
     switch (uMsg) {
-        case WM_CREATE:
-
-            break;
         case WM_PAINT:
-            
+
+            draw->setMainWindowSize(hWnd);
+
             draw->beginPaint(hWnd);
-             
+
+            GetClientRect(hWnd, &rt);
+            FillRect(draw->getHDC(), &rt, (HBRUSH)(COLOR_WINDOW + 1));
+
             draw->calculateWorkRect();
 
             draw->drawX();
             draw->drawY();
 
-            draw->setStepX();
+            draw->setNewView();
+
+            draw->setStepsCount();
+            draw->drawDivisionX();
+            draw->drawDivisionY();
+            
 
             draw->calculatePoints();
 
@@ -145,21 +154,18 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
                 case ID_40001:
-                    if (DialogBox(NULL, (LPCTSTR)IDD_DIALOG1, hWnd, (DLGPROC)DlgProc) == IDOK) {
+                    if (DialogBox(NULL, (LPCTSTR)IDD_DIALOG1, hWnd, (DLGPROC)DlgProc) == IDOK)
                         InvalidateRect(hWnd, NULL, TRUE);
-                        SendMessage(hWnd, WM_PAINT, wParam, lParam);
-                    }
                     break;
             }
             break;
         case WM_LBUTTONDOWN:
-            if (DialogBox(NULL, (LPCTSTR)IDD_DIALOG1, hWnd, (DLGPROC)DlgProc) == IDOK) {
+            if (DialogBox(NULL, (LPCTSTR)IDD_DIALOG1, hWnd, (DLGPROC)DlgProc) == IDOK)
                 InvalidateRect(hWnd, NULL, TRUE);
-                SendMessage(hWnd, WM_PAINT, wParam, lParam);
-            }
             break;
         case WM_SIZE:
             GetClientRect(hWnd, &rt);
+            InvalidateRect(hWnd, &rt, FALSE);
             break;
         case WM_CLOSE:
             PostQuitMessage(0);
@@ -181,7 +187,6 @@ int WINAPI WinMain(HINSTANCE hInst,
     MSG uMsg;
     WNDCLASSEX mainWindowClass;
     HWND mainWindow;
-    HWND dialogWindow;
 
     memset(&mainWindowClass, 0, sizeof(WNDCLASSEX));
     mainWindowClass.cbSize = sizeof(WNDCLASSEX);
